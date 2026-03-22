@@ -1,11 +1,23 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.models.estudiante import Estudiante
+
 
 app = FastAPI()
+
+
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+@app.get("/Estudiantes")
+def get_estudiantes(db: Session = Depends(get_db)):
+    estudiantes = db.query(Estudiante).all()
+    return estudiantes
+
 
 app.add_middleware(
     CORSMiddleware,
