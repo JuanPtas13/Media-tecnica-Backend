@@ -2,9 +2,9 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import logging
 import time
+import bcrypt
 from jose import JWTError, jwt
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -17,9 +17,6 @@ from app.utils.permissions import tiene_permiso
 # Configurar logger
 logger = logging.getLogger(__name__)
 
-# Configuración de contraseñas
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # Configuración
 settings = get_settings()
 
@@ -29,14 +26,79 @@ http_bearer = HTTPBearer(
 )
 
 
+
 def hash_password(password: str) -> str:
-    """Hashear una contraseña"""
-    return pwd_context.hash(password)
+    """
+    Hashear una contraseña usando bcrypt directamente.
+    
+    ⚠️ CRÍTICO: bcrypt tiene límite DURO de 72 bytes.
+    
+    Args:
+        password: Contraseña en texto plano (string)
+        
+    Returns:
+        Hash bcrypt de la contraseña (bytes decodificado a string)
+        
+    Raises:
+        ValueError: Si hay error al hashear
+    """
+    print("[HASH] ====== INICIANDO HASH_PASSWORD ======")
+    print(f"[HASH] Tipo entrada: {type(password)}")
+    print(f"[HASH] Valor recibido: {password[:10]}..." if len(password) > 10 else f"[HASH] Valor recibido: {password}")
+    print(f"[HASH] Caracteres: {len(password)}")
+    print(f"[HASH] Bytes UTF-8: {len(password.encode('utf-8'))}")
+    
+    # VALIDACIÓN 1: Debe ser string
+    if not isinstance(password, str):
+        print(f"[HASH] ERROR: No es string, es {type(password).__name__}")
+        logger.error(f"hash_password recibió tipo incorrecto: {type(password).__name__}")
+        raise ValueError(f"La contraseña debe ser string, recibido: {type(password).__name__}")
+    
+    # VALIDACIÓN 2: No puede exceder 72 bytes en UTF-8
+    bytes_length = len(password.encode('utf-8'))
+    if bytes_length > 72:
+        print(f"[HASH] ERROR: {bytes_length} bytes > 72 bytes")
+        logger.error(f"Contraseña excede 72 bytes: {bytes_length} bytes")
+        raise ValueError(
+            f"Contraseña demasiado larga ({bytes_length} bytes, máximo 72). "
+            f"Usa una contraseña más corta."
+        )
+    
+    # VALIDACIÓN 3: Intentar hashear directamente con bcrypt
+    try:
+        print(f"[HASH] Usando bcrypt.hashpw() directamente...")
+        password_bytes = password.encode('utf-8')
+        salt = bcrypt.gensalt(rounds=12)
+        hashed_bytes = bcrypt.hashpw(password_bytes, salt)
+        hashed_str = hashed_bytes.decode('utf-8')
+        print(f"[HASH] ✓ Éxito - Hash de {len(hashed_str)} caracteres")
+        logger.info("Contraseña hasheada correctamente con bcrypt")
+        return hashed_str
+        
+    except ValueError as e:
+        print(f"[HASH] ERROR ValueError: {str(e)}")
+        logger.error(f"Error bcrypt: {str(e)}")
+        raise ValueError(f"Error al procesar contraseña: {str(e)}")
+    except Exception as e:
+        print(f"[HASH] ERROR inesperado: {type(e).__name__}: {str(e)}")
+        logger.error(f"Error inesperado al hashear: {type(e).__name__}: {str(e)}")
+        raise ValueError(f"Error procesando contraseña: {str(e)}")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verificar una contraseña contra su hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verificar una contraseña contra su hash usando bcrypt directamente"""
+    try:
+        print(f"[VERIFY] Comparando contraseña...")
+        plain_bytes = plain_password.encode('utf-8')
+        hashed_bytes = hashed_password.encode('utf-8')
+        result = bcrypt.checkpw(plain_bytes, hashed_bytes)
+        print(f"[VERIFY] Resultado: {result}")
+        return result
+    except Exception as e:
+        print(f"[VERIFY] Error: {str(e)}")
+        logger.error(f"Error verificando contraseña: {str(e)}")
+        return False
+
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:

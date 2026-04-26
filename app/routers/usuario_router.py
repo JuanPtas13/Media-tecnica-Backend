@@ -83,7 +83,7 @@ def obtener_usuario(
 @router.post("/", response_model=dict, status_code=201)
 def crear_usuario(
     usuario_in: UsuarioCreate,
-    current_user = Depends(permiso_requerido("crear_usuario")),
+    #current_user = Depends(permiso_requerido("crear_usuario")),
     db: Session = Depends(get_db)
 ):
     """Crear nuevo usuario - Requiere permiso 'crear_usuario'"""

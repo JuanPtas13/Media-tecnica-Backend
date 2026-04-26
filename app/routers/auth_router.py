@@ -76,9 +76,13 @@ def login(
                 detail="Email o contraseña incorrectos"
             )
         
-        # Crear JWT token con el ID del usuario
+        # Crear JWT token con el ID del usuario Y su rol
+        # El rol se incluye para que el frontend pueda verificarlo
         access_token = create_access_token(
-            data={"sub": str(usuario.id_usuario)},
+            data={
+                "sub": str(usuario.id_usuario),
+                "rol": usuario.rol.nombre if usuario.rol else "usuario"
+            },
             expires_delta=timedelta(hours=settings.JWT_EXPIRATION_HOURS)
         )
         
@@ -89,24 +93,21 @@ def login(
         )
         
         # Retornar token y datos del usuario
-        return success_response(
-            data={
-                "access_token": access_token,
-                "token_type": "bearer",
-                "expires_in": settings.JWT_EXPIRATION_HOURS * 3600,
-                "usuario": {
-                    "id": usuario.id_usuario,
-                    "email": usuario.correo,
-                    "nombre": usuario.nombre,
-                    "apellido1": usuario.apellido1,
-                    "apellido2": usuario.apellido2,
-                    "rol": usuario.rol.nombre if usuario.rol else None,
-                    "rol_id": usuario.rol_id,
-                    "estado": usuario.estado
-                }
-            },
-            message="Sesión iniciada exitosamente"
-        )
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": settings.JWT_EXPIRATION_HOURS * 3600,
+            "user": {
+                "id": usuario.id_usuario,
+                "email": usuario.correo,
+                "nombre": usuario.nombre,
+                "apellido1": usuario.apellido1,
+                "apellido2": usuario.apellido2,
+                "rol": usuario.rol.nombre if usuario.rol else None,
+                "rol_id": usuario.rol_id,
+                "estado": usuario.estado
+            }
+        }
     except HTTPException:
         raise
     except Exception as e:

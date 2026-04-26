@@ -1,10 +1,13 @@
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
+import logging
 from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.permiso_repository import PermisoRepository
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate, UsuarioResponse
 from app.models.usuario import Usuario
 from app.core.segurity import hash_password
+
+logger = logging.getLogger(__name__)
 
 
 class UsuarioService:
@@ -46,42 +49,74 @@ class UsuarioService:
     # ===== MÉTODOS PÚBLICOS (retornan UsuarioResponse para seguridad) =====
     
     def crear_usuario(self, usuario_in: UsuarioCreate) -> UsuarioResponse:
-        """Crear nuevo usuario"""
-        # Validación: verificar correo único
+        """Crear nuevo usuario con validación y hash seguro de contraseña"""
+        print(f"\n[SERVICE] ========== CREAR USUARIO: {usuario_in.correo} ==========")
+        
+        # PASO 1: Verificar correo único
+        print(f"[SERVICE] PASO 1: Verificando correo único...")
         if self.repository.existe_correo(usuario_in.correo):
-            raise ValueError(f"Ya existe un usuario con correo {usuario_in.correo}")
+            error = f"Ya existe usuario con correo {usuario_in.correo}"
+            print(f"[SERVICE] ERROR: {error}")
+            raise ValueError(error)
+        print(f"[SERVICE] OK: Correo disponible")
         
+        # PASO 2: Convertir a diccionario y extraer contraseña
+        print(f"[SERVICE] PASO 2: Extrayendo contraseña...")
         usuario_data = usuario_in.dict()
-        
-        # OBLIGATORIO: Extraer contraseña SOLO en texto plano y eliminae del diccionario
         password = usuario_data.pop("contrasena", None)
+        print(f"[SERVICE] Contraseña extraída: {type(password).__name__}")
         
         if not password:
-            raise ValueError("La contraseña es requerida")
+            error = "Contraseña requerida"
+            print(f"[SERVICE] ERROR: {error}")
+            raise ValueError(error)
         
-        # OBLIGATORIO: Validar que es string (no objeto, dict, o cualquier otra cosa)
+        # PASO 3: Validar que sea string
+        print(f"[SERVICE] PASO 3: Validando tipo de contraseña...")
         if not isinstance(password, str):
-            raise ValueError(f"La contraseña debe ser texto plano (string), recibido: {type(password).__name__}")
+            error = f"Contraseña debe ser string, recibida: {type(password).__name__}"
+            print(f"[SERVICE] ERROR: {error}")
+            raise ValueError(error)
+        print(f"[SERVICE] OK: Es string")
         
-        # DEBUG OBLIGATORIO: Detectar si se envía basura
-        print("=" * 60)
-        print("PASSWORD DEBUG:")
-        print(f"  Valor: {password}")
-        print(f"  Tipo: {type(password)}")
-        print(f"  Longitud (caracteres): {len(password)}")
-        print(f"  Longitud (bytes UTF-8): {len(password.encode('utf-8'))}")
-        print("=" * 60)
+        # PASO 4: Verificar longitud
+        print(f"[SERVICE] PASO 4: Verificando longitud...")
+        chars = len(password)
+        bytes_len = len(password.encode('utf-8'))
+        print(f"[SERVICE] Contraseña: {chars} caracteres, {bytes_len} bytes UTF-8")
         
-        # OBLIGATORIO: Validar longitud REAL en bytes (bcrypt máximo 72 bytes)
-        bytes_count = len(password.encode('utf-8'))
-        if bytes_count > 72:
-            raise ValueError(f"La contraseña supera el límite permitido (máximo 72 bytes, tiene {bytes_count} bytes)")
+        if bytes_len > 72:
+            error = f"Contraseña excede 72 bytes ({bytes_len} bytes)"
+            print(f"[SERVICE] ERROR: {error}")
+            raise ValueError(error)
+        print(f"[SERVICE] OK: Dentro del límite")
         
-        # OBLIGATORIO: Hashear SOLO la contraseña en texto plano
-        usuario_data["contrasena_hash"] = hash_password(password)
+        # PASO 5: Hashear
+        print(f"[SERVICE] PASO 5: Ejecutando hash_password()...")
+        try:
+            usuario_data["contrasena_hash"] = hash_password(password)
+            print(f"[SERVICE] OK: Contraseña hasheada")
+        except Exception as e:
+            error = f"Error hashing: {str(e)}"
+            print(f"[SERVICE] ERROR: {error}")
+            raise ValueError(error)
         
-        usuario = self.repository.create(usuario_data)
-        return UsuarioResponse.from_orm(usuario)
+        # PASO 6: Guardar en BD
+        print(f"[SERVICE] PASO 6: Guardando en base de datos...")
+        try:
+            usuario = self.repository.create(usuario_data)
+            print(f"[SERVICE] OK: Usuario creado (ID: {usuario.id_usuario})")
+            logger.info(f"Usuario creado: {usuario.correo} (ID: {usuario.id_usuario})")
+            print(f"[SERVICE] ========== FIN CREATE_USUARIO ==========\n")
+            return UsuarioResponse.from_orm(usuario)
+        except Exception as e:
+            error = f"Error guardando usuario: {str(e)}"
+            print(f"[SERVICE] ERROR: {error}")
+            raise ValueError(error)
+            return UsuarioResponse.from_orm(usuario)
+        except Exception as e:
+            logger.error(f"Error al crear usuario en BD: {str(e)}")
+            raise ValueError(f"Error al guardar el usuario: {str(e)}")
     
     def obtener_usuario(self, usuario_id: int) -> Optional[UsuarioResponse]:
         """Obtener usuario por ID"""
