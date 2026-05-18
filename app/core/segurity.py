@@ -368,6 +368,10 @@ def permiso_requerido(permiso: str):
         Raises:
             HTTPException: 403 si no tiene el permiso
         """
+        # Permitir siempre acceso completo a administradores por rol.
+        if current_user.get("rol") == "admin":
+            return current_user
+
         if not tiene_permiso(current_user, permiso):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

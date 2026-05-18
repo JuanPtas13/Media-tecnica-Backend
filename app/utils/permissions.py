@@ -25,6 +25,10 @@ def tiene_permiso(user: Dict[str, Any], permiso: str) -> bool:
     """
     if not user or "permisos" not in user:
         return False
+
+    # Los administradores deberían tener acceso completo por rol.
+    if user.get("rol") == "admin":
+        return True
     
     return permiso in user.get("permisos", [])
 
@@ -46,6 +50,9 @@ def tiene_alguno(user: Dict[str, Any], permisos: List[str]) -> bool:
     """
     if not user or "permisos" not in user:
         return False
+
+    if user.get("rol") == "admin":
+        return True
     
     user_permisos = user.get("permisos", [])
     return any(p in user_permisos for p in permisos)
@@ -68,6 +75,9 @@ def tiene_todos(user: Dict[str, Any], permisos: List[str]) -> bool:
     """
     if not user or "permisos" not in user:
         return False
+
+    if user.get("rol") == "admin":
+        return True
     
     user_permisos = user.get("permisos", [])
     return all(p in user_permisos for p in permisos)
