@@ -193,6 +193,19 @@ class UsuarioService:
         usuarios = self.repository.get_all(skip, limit)
         return [UsuarioResponse.from_orm(usr) for usr in usuarios]
     
+    def cambiar_contrasena(self, usuario_id: int, nueva_contrasena: str) -> bool:
+        """Cambiar contraseña de usuario hasheando la nueva"""
+        usuario = self.repository.get_by_id(usuario_id)
+        if not usuario:
+            return False
+    
+        if not isinstance(nueva_contrasena, str) or len(nueva_contrasena.encode('utf-8')) > 72:
+            raise ValueError("Contraseña inválida o excede 72 bytes")
+    
+        contrasena_hash = hash_password(nueva_contrasena)
+        self.repository.update(usuario_id, {"contrasena_hash": contrasena_hash})
+        return True
+    
     def actualizar_usuario(self, usuario_id: int, usuario_in: UsuarioUpdate) -> Optional[UsuarioResponse]:
         """Actualizar usuario"""
         # Validar correo único si se está actualizando

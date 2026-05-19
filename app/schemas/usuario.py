@@ -57,3 +57,8 @@ class UsuarioResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        
+class CambiarContrasena(BaseModel):
+    """Schema para cambiar contraseña de usuario"""
+    nueva_contrasena: str
+    

@@ -7,10 +7,11 @@ from app.core.segurity import get_current_user, permiso_requerido, require_admin
 from app.services.usuario_service import UsuarioService
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate, UsuarioResponse
 from app.utils.responses import success_response
-
+from app.schemas.usuario import UsuarioCreate, UsuarioUpdate, UsuarioResponse, CambiarContrasena
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
+
 
 
 @router.get("/", response_model=dict)
@@ -83,7 +84,7 @@ def obtener_usuario(
 @router.post("/", response_model=dict, status_code=201)
 def crear_usuario(
     usuario_in: UsuarioCreate,
-    #current_user = Depends(permiso_requerido("crear_usuario")),
+    current_user = Depends(permiso_requerido("crear_usuario")),
     db: Session = Depends(get_db)
 ):
     """Crear nuevo usuario - Requiere permiso 'crear_usuario'"""
@@ -120,6 +121,30 @@ def actualizar_usuario(
             data=usuario,
             message="Usuario actualizado exitosamente"
         )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/{usuario_id}/contrasena", response_model=dict)
+def cambiar_contrasena(
+    usuario_id: int,
+    datos: CambiarContrasena,
+    current_user = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Cambiar contraseña de usuario - SOLO ADMIN"""
+    try:
+        service = UsuarioService(db)
+        actualizado = service.cambiar_contrasena(usuario_id, datos.nueva_contrasena)
+        
+        if not actualizado:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        return success_response(message="Contraseña actualizada exitosamente")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
