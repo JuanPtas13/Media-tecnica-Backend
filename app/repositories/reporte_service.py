@@ -22,7 +22,7 @@ class ReporteRepository:
         presentes = self.db.query(func.count(RegistroIngreso.id)).join(Estudiante).filter(
             Estudiante.grado_id == grado_id,
             RegistroIngreso.fecha == fecha,
-            RegistroIngreso.estado == "entrada"
+            RegistroIngreso.estado.in_(["a tiempo", "tarde"])
         ).scalar() or 0
         
         return {
@@ -35,23 +35,32 @@ class ReporteRepository:
         }
     
     def asistencia_por_estudiante(self, estudiante_id: int, fecha_inicio: date, fecha_fin: date) -> dict:
-        """Obtener reporte de asistencia de un estudiante en un rango de fechas"""
-        
         registros = self.db.query(RegistroIngreso).filter(
             RegistroIngreso.estudiante_id == estudiante_id,
             RegistroIngreso.fecha >= fecha_inicio,
             RegistroIngreso.fecha <= fecha_fin
         ).all()
 
-        entradas = len([r for r in registros if r.estado == "entrada"])
-        
+        entradas = len([r for r in registros if r.estado in ["a tiempo", "tarde"]])
+
         return {
             "estudiante_id": estudiante_id,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": fecha_fin,
             "entradas": entradas,
             "total_registros": len(registros),
-            "registros": registros
+            # ✅ Serializar manualmente cada registro
+            "registros": [
+                {
+                    "id": r.id,
+                    "fecha": str(r.fecha),
+                    "hora": str(r.hora),
+                    "estado": r.estado,
+                    "estudiante_id": r.estudiante_id,
+                    "usuario_id": r.usuario_id,
+                }
+                for r in registros
+            ]
         }
     
     def actividad_por_rango(self, fecha_inicio: date, fecha_fin: date) -> dict:

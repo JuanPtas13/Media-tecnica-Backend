@@ -58,7 +58,7 @@ def obtener_configs_activos(
 
 @router.get("/vigente", response_model=dict)
 def obtener_config_vigente(
-    current_user = Depends(require_docente_or_admin),
+    current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Obtener configuración vigente (activa en fecha actual) - DOCENTE o ADMIN"""

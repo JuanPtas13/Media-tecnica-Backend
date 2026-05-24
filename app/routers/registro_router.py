@@ -8,6 +8,7 @@ from app.core.segurity import get_current_user, permiso_requerido, require_docen
 from app.services.registro_service import RegistroService
 from app.schemas.registro import RegistroIngresoCreate, RegistroIngresoUpdate, RegistroIngresoResponse
 from app.utils.responses import success_response
+from app.core.segurity import require_vigilante
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +172,7 @@ def obtener_registro(
 @router.post("/", response_model=dict, status_code=201)
 def crear_registro(
     registro_in: RegistroIngresoCreate,
-    current_user = Depends(permiso_requerido("crear_registro")),
+    current_user = Depends(require_vigilante),
     db: Session = Depends(get_db)
 ):
     """Crear nuevo registro - Requiere permiso 'crear_registro'"""

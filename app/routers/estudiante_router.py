@@ -60,6 +60,30 @@ def buscar_estudiantes(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/documento/{documento}", response_model=dict)
+def obtener_estudiante_por_documento(
+    documento: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obtener estudiante por documento - Todos los roles autenticados"""
+    try:
+        logger.debug(f"Buscar estudiante por documento {documento} | Usuario: {current_user.get('email')}")
+        service = EstudianteService(db)
+        estudiante = service.obtener_por_documento(documento)
+        
+        if not estudiante:
+            raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+        
+        return success_response(
+            data=estudiante,
+            message="Estudiante obtenido exitosamente"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/activos", response_model=dict)
