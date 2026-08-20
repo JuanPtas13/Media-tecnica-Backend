@@ -1,96 +1,148 @@
-# 🎉 Media Técnica Backend - Arquitectura Limpia
+# Media Técnica Backend
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green?style=flat-square)](https://fastapi.tiangolo.com/)
-[![Python](https://img.shields.io/badge/Python-3.13+-blue?style=flat-square)](https://www.python.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-blue?style=flat-square)](https://www.postgresql.org/)
+API REST para la gestión de estudiantes, usuarios, roles, registros de
+asistencia, horarios y reportes académicos. Está construida con FastAPI,
+SQLAlchemy y PostgreSQL, siguiendo una separación por capas entre routers,
+servicios, repositorios, modelos y esquemas.
 
-> API REST profesional para control de asistencia con **arquitectura limpia**, **separación de responsabilidades** y **buenas prácticas**.
+## Requisitos
 
----
+- Python 3.10 o superior
+- PostgreSQL 12 o superior, o una base de datos compatible como Supabase
+- `pip`
 
-## 🚀 Inicio Rápido
+## Instalación
+
+Desde la carpeta `Media-tecnica-Backend`:
 
 ```bash
-# 1. Instalar dependencias
+python -m venv .venv
+
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+
+# Linux/macOS
+source .venv/bin/activate
+
 pip install -r requirements.txt
-
-# 2. Ejecutar servidor
-python -m uvicorn app.main:app --reload
-
-# 3. Acceder a
-# - API: http://localhost:8000
-# - Docs: http://localhost:8000/docs
 ```
 
----
+## Configuración
 
-## 📚 Documentación Completa
+La aplicación carga las variables desde un archivo `.env` en la raíz del
+backend. Como mínimo, configura la conexión a PostgreSQL y reemplaza la clave
+JWT antes de desplegar:
 
-- 📖 **[ARQUITECTURA.md](ARQUITECTURA.md)** - Arquitectura detallada
-- 📊 **[ESTRUCTURA_VISUAL.md](ESTRUCTURA_VISUAL.md)** - Diagramas y flujos
-- ✅ **[CAMBIOS_REALIZADOS.md](CAMBIOS_REALIZADOS.md)** - Todos los cambios
-- ⚡ **[GUIA_RAPIDA.md](GUIA_RAPIDA.md)** - Tutorial rápido
-
----
-
-## 🏗️ Estructura
-
+```env
+DATABASE_URL=postgresql://usuario:contraseña@localhost:5432/media_tecnica
+APP_NAME=Media Técnica Backend
+APP_VERSION=1.0.0
+DEBUG=true
+JWT_SECRET_KEY=cambia-esta-clave-por-una-secreta-y-larga
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
+CORS_ORIGINS=["http://localhost:5173"]
+CORS_CREDENTIALS=true
+CORS_METHODS=["*"]
+CORS_HEADERS=["*"]
 ```
+
+No publiques credenciales de la base de datos ni `JWT_SECRET_KEY`. La conexión
+actual se inicializa con `sslmode=require`, por lo que el servidor PostgreSQL
+debe aceptar conexiones SSL.
+
+## Ejecución
+
+```bash
+ uvicorn app.main:app --reload
+```
+
+La API queda disponible en `http://localhost:8000`:
+
+- Documentación interactiva: `http://localhost:8000/docs`
+- Especificación OpenAPI: `http://localhost:8000/openapi.json`
+- Estado del servicio: `http://localhost:8000/health`
+
+Al iniciar, la aplicación crea las tablas declaradas en los modelos si todavía
+no existen.
+
+## Autenticación y autorización
+
+El login es público y devuelve un token JWT:
+
+```http
+POST /auth/login
+Content-Type: application/json
+
+{
+	"email": "usuario@ejemplo.com",
+	"contraseña": "tu-contraseña"
+}
+```
+
+Para los endpoints protegidos, envía el token en cada solicitud:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Roles disponibles:
+
+| Rol | Acceso general |
+| --- | --- |
+| `ADMIN` | Gestión completa del sistema |
+| `DOCENTE` | Estudiantes y reportes académicos |
+| `VIGILANTE` | Creación de registros de asistencia |
+
+Consulta [README_COMPLEMENTARIO.md](README_COMPLEMENTARIO.md) para conocer las
+reglas de autorización, el modelo de datos y las pruebas.
+
+## Recursos de la API
+
+| Prefijo | Funcionalidad |
+| --- | --- |
+| `/auth` | Inicio y cierre de sesión |
+| `/estudiantes` | CRUD, búsqueda y filtros de estudiantes |
+| `/usuarios` | Administración de usuarios y contraseñas |
+| `/registros` | Registros de entrada, salida y asistencia |
+| `/grados` | Administración de grados |
+| `/roles` | Administración de roles |
+| `/config-horarios` | Configuración de horarios |
+| `/reportes` | Reportes de asistencia y actividad |
+
+La lista completa de operaciones, parámetros y respuestas está disponible en
+Swagger (`/docs`) y en el esquema OpenAPI (`/openapi.json`).
+
+## Estructura del proyecto
+
+```text
 app/
-├── core/              # Configuración + BD
-├── models/            # Modelos SQLAlchemy
-├── schemas/           # Validación Pydantic
-├── repositories/      # Acceso a datos (CRUD)
-├── services/          # Lógica de negocio
-├── routers/           # Endpoints HTTP
-├── utils/             # Utilidades
-└── main.py            # Punto de entrada
+├── core/          Configuración, seguridad y base de datos
+├── models/        Modelos SQLAlchemy
+├── schemas/       Validación y serialización con Pydantic
+├── repositories/  Acceso a datos
+├── services/      Lógica de negocio
+├── routers/       Endpoints HTTP
+├── utils/         Respuestas y utilidades compartidas
+└── main.py        Punto de entrada de FastAPI
 ```
 
----
+## Pruebas
 
-## 📌 Endpoints Principales
+Ejecuta las pruebas desde la raíz del backend:
 
-```
-GET    /estudiantes/              Listar
-POST   /estudiantes/              Crear
-GET    /estudiantes/{id}          Obtener
-PUT    /estudiantes/{id}          Actualizar
-DELETE /estudiantes/{id}          Eliminar
-
-GET    /usuarios/
-POST   /registros/
+```bash
+python -m pytest
 ```
 
-Ver todos en [ARQUITECTURA.md](ARQUITECTURA.md#-endpoints-configurados)
+Pruebas disponibles:
 
----
+- [test_password_simple.py](test_password_simple.py)
+- [test_password_validation.py](test_password_validation.py)
+- [tests/test_auth_roles.py](tests/test_auth_roles.py)
 
-## ✨ Características
+## Documentación adicional
 
-✅ Arquitectura limpia (5 capas)  
-✅ CRUD completo  
-✅ Validación con Pydantic v2  
-✅ Response estándar  
-✅ Documentación automática (Swagger)  
-✅ SQLAlchemy ORM  
-✅ 34 endpoints funcionales  
-
----
-
-## 📝 Requisitos
-
-- Python 3.10+
-- PostgreSQL 12+ (o Supabase)
-- pip
-
----
-
-## 🤝 Contribuir
-
-Las mejoras son bienvenidas. Abre un Issue o Pull Request.
-
----
-
-**¡Tu proyecto está listo para producción! 🚀**
+- [README_COMPLEMENTARIO.md](README_COMPLEMENTARIO.md)
+- [docs/diagrams/database_design.md](docs/diagrams/database_design.md)
 

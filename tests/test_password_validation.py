@@ -243,7 +243,7 @@ def main():
     print("=" * 60)
     print(f"Revisa los resultados arriba.")
     print(f"Todos los tests deben mostrar ✓ PASS (excepto los que intencionalmente fallan).")
-    print(f"Ver: {Colors.OKBLUE}PASSWORD_VALIDATION_FIX.md{Colors.ENDC} para más detalles.")
+    print(f"Ver: {Colors.OKBLUE}README_COMPLEMENTARIO.md{Colors.ENDC} para más detalles.")
     print(f"{Colors.ENDC}\n")
 
 
