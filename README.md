@@ -1,74 +1,148 @@
-# Proyecto Media Tecnica
+# Media Técnica Backend
 
-Este es un repositorio del proyecto de media técnica.
+API REST para la gestión de estudiantes, usuarios, roles, registros de
+asistencia, horarios y reportes académicos. Está construida con FastAPI,
+SQLAlchemy y PostgreSQL, siguiendo una separación por capas entre routers,
+servicios, repositorios, modelos y esquemas.
 
-## Requisitos Previos
+## Requisitos
 
-- Python 3.8 o superior
-- pip (gestor de paquetes de Python)
+- Python 3.10 o superior
+- PostgreSQL 12 o superior, o una base de datos compatible como Supabase
+- `pip`
 
-## Configuración del Entorno Virtual
+## Instalación
 
-Para ejecutar o trabajar en el proyecto, es necesario crear un entorno virtual. Sigue estos pasos:
+Desde la carpeta `Media-tecnica-Backend`:
 
-### 1. Crear el entorno virtual
+```bash
+python -m venv .venv
 
-```
-bash
-# En Windows
-python -m venv venv
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
 
-# En Linux/Mac
-python3 -m venv venv
-```
+# Linux/macOS
+source .venv/bin/activate
 
-### 2. Activar el entorno virtual
-
-```
-bash
-# En Windows
-venv\Scripts\activate
-
-# En Linux/Mac
-source venv/bin/activate
-```
-
-### 3. Instalar las dependencias
-
-```
-bash
 pip install -r requirements.txt
 ```
 
-## Ejecutar la Aplicación
+## Configuración
 
-Una vez configurado el entorno, puedes ejecutar la aplicación de dos formas:
+La aplicación carga las variables desde un archivo `.env` en la raíz del
+backend. Crea tu archivo local a partir de la plantilla:
 
-### Opción 1: Directamente con Python
-
-```
-bash
-python app/app.py
+```powershell
+Copy-Item .env.example .env
 ```
 
-### Opción 2: Con Uvicorn
+Configura `DATABASE_URL`, `JWT_SECRET_KEY` y `CORS_ORIGINS` en `.env` para
+desarrollo o en el administrador de variables del proveedor para producción.
+La aplicación no tiene credenciales predeterminadas: `JWT_SECRET_KEY` debe
+tener al menos 32 caracteres y `CORS_ORIGINS` debe contener orígenes completos,
+sin comodines. Para producción, usa solamente el dominio HTTPS del frontend y
+mantén `DEBUG=false`.
 
+No publiques `.env`, credenciales de base de datos ni `JWT_SECRET_KEY`. Si una
+credencial se publicó anteriormente, rótala en el proveedor: quitarla del
+código actual no la elimina del historial de Git. La conexión requiere SSL
+(`sslmode=require`).
+
+Antes de desplegar una versión que incluya cambios de esquema, aplica primero
+las migraciones SQL documentadas en `docs/migrations/` a la base de datos.
+`create_all()` solo crea tablas nuevas; no actualiza tablas existentes.
+
+## Ejecución
+
+```bash
+ uvicorn app.main:app --reload
 ```
-bash
-uvicorn app.app:app --host 0.0.0.0 --port 8000
+
+La API queda disponible en `http://localhost:8000`:
+
+- Documentación interactiva: `http://localhost:8000/docs`
+- Especificación OpenAPI: `http://localhost:8000/openapi.json`
+- Estado del servicio: `http://localhost:8000/health`
+
+Al iniciar, la aplicación crea las tablas declaradas en los modelos si todavía
+no existen.
+
+## Autenticación y autorización
+
+El login es público y devuelve un token JWT:
+
+```http
+POST /auth/login
+Content-Type: application/json
+
+{
+	"email": "usuario@ejemplo.com",
+	"contraseña": "tu-contraseña"
+}
 ```
 
-La aplicación estará disponible en: http://localhost:8000
+Para los endpoints protegidos, envía el token en cada solicitud:
 
-## Estructura del Proyecto
-
-```
-├── app/
-│   └── app.py          # Aplicación principal
-├── docs/
-│   └── diagrams/       # Diagramas del proyecto
-├── requirements.txt    # Dependencias del proyecto
-└── .gitignore          # Archivos ignorados por Git
+```http
+Authorization: Bearer <access_token>
 ```
 
+Roles disponibles:
 
+| Rol | Acceso general |
+| --- | --- |
+| `ADMIN` | Gestión completa del sistema |
+| `DOCENTE` | Estudiantes y reportes académicos |
+| `VIGILANTE` | Creación de registros de asistencia |
+
+Consulta [README_COMPLEMENTARIO.md](README_COMPLEMENTARIO.md) para conocer las
+reglas de autorización, el modelo de datos y las pruebas.
+
+## Recursos de la API
+
+| Prefijo | Funcionalidad |
+| --- | --- |
+| `/auth` | Inicio y cierre de sesión |
+| `/estudiantes` | CRUD, búsqueda y filtros de estudiantes |
+| `/usuarios` | Administración de usuarios y contraseñas |
+| `/registros` | Registros de entrada, salida y asistencia |
+| `/grados` | Administración de grados |
+| `/roles` | Administración de roles |
+| `/config-horarios` | Configuración de horarios |
+| `/reportes` | Reportes de asistencia y actividad |
+
+La lista completa de operaciones, parámetros y respuestas está disponible en
+Swagger (`/docs`) y en el esquema OpenAPI (`/openapi.json`).
+
+## Estructura del proyecto
+
+```text
+app/
+├── core/          Configuración, seguridad y base de datos
+├── models/        Modelos SQLAlchemy
+├── schemas/       Validación y serialización con Pydantic
+├── repositories/  Acceso a datos
+├── services/      Lógica de negocio
+├── routers/       Endpoints HTTP
+├── utils/         Respuestas y utilidades compartidas
+└── main.py        Punto de entrada de FastAPI
+```
+
+## Pruebas
+
+Ejecuta las pruebas desde la raíz del backend:
+
+```bash
+python -m pytest
+```
+
+Pruebas disponibles:
+
+- [test_password_simple.py](test_password_simple.py)
+- [test_password_validation.py](test_password_validation.py)
+- [tests/test_auth_roles.py](tests/test_auth_roles.py)
+
+## Documentación adicional
+
+- [README_COMPLEMENTARIO.md](README_COMPLEMENTARIO.md)
+- [docs/diagrams/database_design.md](docs/diagrams/database_design.md)
