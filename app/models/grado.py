@@ -11,6 +11,8 @@ Representa un grado escolar (ej. 10-A) y relaciona los estudiantes que pertenece
 
 
 class Grado(BaseModel):
+    """Representa un grado escolar y los estudiantes asociados a él."""
+
     __tablename__ = "grado"
 
     # PK del grado

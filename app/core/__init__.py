@@ -1,3 +1,5 @@
+"""Reexporta configuración y objetos de base de datos usados por el backend."""
+
 from app.core.config import get_settings, Settings
 from app.core.database import get_db, Base, engine, SessionLocal
 

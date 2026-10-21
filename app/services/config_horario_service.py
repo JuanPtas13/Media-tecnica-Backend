@@ -1,3 +1,5 @@
+"""Reglas de negocio para crear, validar y consultar horarios de asistencia."""
+
 from typing import List, Optional
 from datetime import date
 from sqlalchemy.orm import Session
@@ -6,19 +8,22 @@ from app.schemas.config_horario import ConfigHorarioCreate, ConfigHorarioUpdate,
 
 
 class ConfigHorarioService:
-    """Servicio de lógica de negocio para ConfigHorario"""
+    """Coordina la validación de horarios y el acceso a su repositorio."""
     
     def __init__(self, db: Session):
+        """Prepara el repositorio con la sesión de base de datos recibida."""
         self.repository = ConfigHorarioRepository(db)
 
     @staticmethod
     def _minutos_entre(inicio, limite) -> int:
+        """Calcula los minutos entre dos horas del mismo día."""
         inicio_minutos = inicio.hour * 60 + inicio.minute
         limite_minutos = limite.hour * 60 + limite.minute
         return limite_minutos - inicio_minutos
 
     @staticmethod
     def _validar_horario(inicio, limite, cierre, aplica_desde, aplica_hasta):
+        """Verifica el orden de horas y que el período de vigencia sea válido."""
         if inicio > limite:
             raise ValueError("La hora límite debe ser igual o posterior al inicio de clase")
         if limite > cierre:
@@ -27,7 +32,7 @@ class ConfigHorarioService:
             raise ValueError("La fecha final debe ser igual o posterior a la fecha inicial")
     
     def crear_config(self, config_in: ConfigHorarioCreate) -> ConfigHorarioResponse:
-        """Crear nueva configuración horaria"""
+        """Calcula la tolerancia y guarda una configuración horaria nueva."""
         datos = config_in.model_dump()
         datos["min_tolerancia"] = self._minutos_entre(
             config_in.hora_inicio_clase,
@@ -37,19 +42,19 @@ class ConfigHorarioService:
         return ConfigHorarioResponse.from_orm(config)
     
     def obtener_config(self, config_id: int) -> Optional[ConfigHorarioResponse]:
-        """Obtener configuración por ID"""
+        """Busca una configuración por su ID."""
         config = self.repository.get_by_id(config_id)
         if not config:
             return None
         return ConfigHorarioResponse.from_orm(config)
     
     def obtener_todos(self, skip: int = 0, limit: int = 100) -> List[ConfigHorarioResponse]:
-        """Obtener todas las configuraciones"""
+        """Lista configuraciones con paginación."""
         configs = self.repository.get_all(skip, limit)
         return [ConfigHorarioResponse.from_orm(config) for config in configs]
     
     def actualizar_config(self, config_id: int, config_in: ConfigHorarioUpdate) -> Optional[ConfigHorarioResponse]:
-        """Actualizar configuración"""
+        """Valida los datos combinados y actualiza una configuración existente."""
         actual = self.repository.get_by_id(config_id)
         if not actual:
             return None
@@ -71,23 +76,23 @@ class ConfigHorarioService:
         return ConfigHorarioResponse.from_orm(config)
     
     def eliminar_config(self, config_id: int) -> bool:
-        """Eliminar configuración"""
+        """Elimina una configuración y devuelve si existía."""
         return self.repository.delete(config_id)
     
     def obtener_activos(self, skip: int = 0, limit: int = 100) -> List[ConfigHorarioResponse]:
-        """Obtener configuraciones activas"""
+        """Lista únicamente configuraciones activas, con paginación."""
         configs = self.repository.get_activos(skip, limit)
         return [ConfigHorarioResponse.from_orm(config) for config in configs]
     
     def obtener_vigente(self) -> Optional[ConfigHorarioResponse]:
-        """Obtener configuración vigente (activa en fecha actual)"""
+        """Obtiene la configuración activa que aplica en la fecha actual."""
         config = self.repository.get_vigente()
         if not config:
             return None
         return ConfigHorarioResponse.from_orm(config)
     
     def obtener_en_fecha(self, fecha: date) -> Optional[ConfigHorarioResponse]:
-        """Obtener configuración en fecha específica"""
+        """Obtiene la configuración activa que aplica en una fecha dada."""
         config = self.repository.get_en_fecha(fecha)
         if not config:
             return None

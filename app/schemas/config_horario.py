@@ -1,3 +1,5 @@
+"""Esquemas Pydantic para validar y serializar configuraciones horarias."""
+
 from typing import Optional
 from datetime import datetime, time, date
 from pydantic import BaseModel, Field, model_validator
@@ -18,6 +20,7 @@ class ConfigHorarioCreate(ConfigHorarioBase):
 
     @model_validator(mode="after")
     def validar_horas(self):
+        """Comprueba que los límites horarios y el rango de vigencia sean coherentes."""
         if self.hora_inicio_clase > self.hora_limite_ingreso:
             raise ValueError("La hora límite debe ser igual o posterior al inicio de clase")
         if self.hora_limite_ingreso > self.hora_cierre_asistencia:

@@ -1,3 +1,5 @@
+"""Carga y valida las variables de entorno usadas por toda la aplicación."""
+
 from functools import lru_cache
 from urllib.parse import urlparse
 
@@ -30,6 +32,7 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET_KEY")
     @classmethod
     def validate_jwt_secret_key(cls, value: str) -> str:
+        """Rechaza claves de firma JWT inferiores al mínimo de seguridad."""
         if len(value) < 32:
             raise ValueError("JWT_SECRET_KEY debe tener al menos 32 caracteres")
         return value
@@ -37,6 +40,7 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL")
     @classmethod
     def validate_database_url(cls, value: str) -> str:
+        """Evita arrancar la aplicación con una URL de base de datos vacía."""
         if not value.strip():
             raise ValueError("DATABASE_URL no puede estar vacía")
         return value
@@ -44,6 +48,7 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS")
     @classmethod
     def validate_cors_origins(cls, origins: list[str]) -> list[str]:
+        """Acepta solo orígenes completos y sin comodines ni rutas."""
         if not origins:
             raise ValueError("CORS_ORIGINS debe incluir al menos un origen")
         for origin in origins:

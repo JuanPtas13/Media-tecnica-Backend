@@ -12,6 +12,8 @@ estado (a tiempo/tarde/ausente) y minutos de retraso calculados.
 
 
 class RegistroIngreso(BaseModel):
+    """Representa el ingreso de un estudiante y el estado de su asistencia."""
+
     __tablename__ = "registro_ingreso"
 
     # PK autoincremental

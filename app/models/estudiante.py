@@ -12,6 +12,8 @@ grado y los registros de asistencia.
 
 
 class Estudiante(BaseModel):
+    """Representa a un alumno, su grado y sus registros de asistencia."""
+
     __tablename__ = "estudiantes"
 
     # PK del estudiante
@@ -41,4 +43,5 @@ class Estudiante(BaseModel):
     registros = relationship("RegistroIngreso", back_populates="estudiante")
 
     def __repr__(self):
+        """Devuelve una representación breve útil al depurar consultas ORM."""
         return f"<Estudiante(id={self.id_estudiante}, nombre={self.nombre})>"

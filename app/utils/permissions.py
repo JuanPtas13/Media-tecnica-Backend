@@ -1,6 +1,7 @@
 """
 Módulo de utilidades para validación de permisos.
 Proporciona funciones helper para verificar permisos en endpoints.
+Los decoradores conservan la firma original para integrarse con FastAPI.
 """
 
 from typing import Dict, Any, List, Optional, Callable
@@ -103,8 +104,10 @@ def requerir_permiso(permiso: str):
             pass
     """
     def decorator(func: Callable) -> Callable:
+        """Envuelve un endpoint y valida su permiso antes de ejecutarlo."""
         @wraps(func)
         def wrapper(*args, current_user: Optional[Dict[str, Any]] = None, **kwargs):
+            """Rechaza usuarios no autenticados o sin el permiso requerido."""
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -143,8 +146,10 @@ def requerir_alguno(permisos: List[str]):
             pass
     """
     def decorator(func: Callable) -> Callable:
+        """Envuelve un endpoint y valida que el usuario tenga algún permiso."""
         @wraps(func)
         def wrapper(*args, current_user: Optional[Dict[str, Any]] = None, **kwargs):
+            """Aplica la autorización OR antes de llamar al endpoint."""
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -183,8 +188,10 @@ def requerir_todos(permisos: List[str]):
             pass
     """
     def decorator(func: Callable) -> Callable:
+        """Envuelve un endpoint y valida que el usuario tenga todos los permisos."""
         @wraps(func)
         def wrapper(*args, current_user: Optional[Dict[str, Any]] = None, **kwargs):
+            """Aplica la autorización AND antes de llamar al endpoint."""
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,

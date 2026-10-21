@@ -1,3 +1,5 @@
+"""Define el formato común de respuesta exitosa o de error para la API."""
+
 from typing import Any, Optional, Generic, TypeVar
 from pydantic import BaseModel
 
@@ -25,6 +27,7 @@ class ResponseSuccess(ResponseBase[T]):
     """Respuesta exitosa"""
     
     def __init__(self, message: str = "Operación exitosa", data: Optional[T] = None, **kwargs):
+        """Inicializa la respuesta con el indicador de éxito activado."""
         super().__init__(success=True, message=message, data=data, **kwargs)
 
 
@@ -32,11 +35,12 @@ class ResponseError(ResponseBase):
     """Respuesta de error"""
     
     def __init__(self, message: str = "Error en la operación", **kwargs):
+        """Inicializa una respuesta de error sin datos asociados."""
         super().__init__(success=False, message=message, data=None, **kwargs)
 
 
 def success_response(data: Any = None, message: str = "Operación exitosa") -> dict:
-    """Crear respuesta de éxito"""
+    """Construye el diccionario estándar para una operación exitosa."""
     return {
         "success": True,
         "message": message,
@@ -45,7 +49,7 @@ def success_response(data: Any = None, message: str = "Operación exitosa") -> d
 
 
 def error_response(message: str = "Error en la operación") -> dict:
-    """Crear respuesta de error"""
+    """Construye el diccionario estándar para una operación fallida."""
     return {
         "success": False,
         "message": message,

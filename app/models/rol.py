@@ -12,6 +12,8 @@ También mantiene una relación many-to-many con permisos.
 
 
 class Rol(BaseModel):
+    """Define el rol de acceso y las relaciones con usuarios y permisos."""
+
     __tablename__ = "roles"
 
     id_roles = Column(Integer, primary_key=True, index=True)

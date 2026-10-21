@@ -1,9 +1,13 @@
+"""Modelo del horario que define inicio, límite, cierre y vigencia de asistencia."""
+
 from sqlalchemy import Column, Integer, Time, Date, Boolean
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 
 
 class ConfigHorario(BaseModel):
+    """Representa una configuración horaria aplicable durante un rango de fechas."""
+
     __tablename__ = "config_horario"
 
     id = Column(Integer, primary_key=True, index=True)

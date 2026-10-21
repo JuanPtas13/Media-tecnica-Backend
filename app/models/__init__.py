@@ -1,3 +1,5 @@
+"""Importa y publica los modelos para registrar sus tablas en SQLAlchemy."""
+
 from app.models.base import BaseModel
 from app.models.estudiante import Estudiante
 from app.models.grado import Grado

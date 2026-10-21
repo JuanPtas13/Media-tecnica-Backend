@@ -1,3 +1,5 @@
+"""Punto de entrada: configura FastAPI, CORS, rutas y endpoints de estado."""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
@@ -13,20 +15,20 @@ from app.routers import (
 )
 from app.core.database import Base, engine
 
-# Obtener configuración
+# Lee la configuración una vez para reutilizarla en la aplicación y sus rutas.
 settings = get_settings()
 
-# Crear tablas en la base de datos (si no existen)
+# Crea tablas nuevas detectadas por SQLAlchemy; no sustituye migraciones existentes.
 Base.metadata.create_all(bind=engine)
 
-# Inicializar aplicación FastAPI
+# Define los metadatos que aparecen en Swagger y OpenAPI.
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="API Backend para Control de Asistencia Media Técnica",
 )
 
-# Configurar CORS
+# Permite que el frontend llame a la API desde los orígenes configurados.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -35,7 +37,7 @@ app.add_middleware(
     allow_headers=settings.CORS_HEADERS,
 )
 
-# Registrar routers
+# Conecta cada módulo de endpoints a la instancia principal de FastAPI.
 app.include_router(auth_router.router)
 app.include_router(estudiante_router.router)
 app.include_router(usuario_router.router)
@@ -46,7 +48,7 @@ app.include_router(config_horario_router.router)
 app.include_router(reporte_router.router)
 
 
-# Health check
+# Endpoint simple para comprobar disponibilidad sin autenticar un usuario.
 @app.get("/health", tags=["Health"])
 def health_check():
     """Verificar que la API está funcionando"""
@@ -59,7 +61,7 @@ def health_check():
 
 @app.get("/", tags=["Root"])
 def root():
-    """Endpoint raíz"""
+    """Describe la API y señala los endpoints de documentación y salud."""
     return {
         "success": True,
         "message": "Bienvenido a la API de Control de Asistencia",
@@ -80,7 +82,6 @@ if __name__ == "__main__":
         port=8000,
         reload=settings.DEBUG
     )
-
 
 
 

@@ -13,6 +13,8 @@ de asistencia asociados.
 
 
 class Usuario(BaseModel):
+    """Representa una cuenta autenticable vinculada a un rol del sistema."""
+
     __tablename__ = "usuarios"
 
     # Identificador primario del usuario

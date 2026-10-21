@@ -1,9 +1,13 @@
+"""Modelo de permisos individuales que pueden asignarse a uno o varios roles."""
+
 from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 
 
 class Permiso(BaseModel):
+    """Describe una acción autorizable y su relación con roles del sistema."""
+
     __tablename__ = "permisos"
 
     id_permiso = Column(Integer, primary_key=True, index=True)

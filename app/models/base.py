@@ -1,3 +1,5 @@
+"""Base declarativa común para que SQLAlchemy registre todos los modelos."""
+
 from app.core.database import Base
 
 
