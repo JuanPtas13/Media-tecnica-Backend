@@ -40,7 +40,11 @@ class Estudiante(BaseModel):
     grado = relationship("Grado", back_populates="estudiantes")
 
     # Registros de asistencia del estudiante (one-to-many)
-    registros = relationship("RegistroIngreso", back_populates="estudiante")
+    registros = relationship(
+        "RegistroIngreso",
+        back_populates="estudiante",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self):
         """Devuelve una representación breve útil al depurar consultas ORM."""
