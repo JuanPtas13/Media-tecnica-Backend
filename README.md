@@ -1,446 +1,790 @@
-# Media Técnica — Backend
+﻿# Media Técnica Backend
 
-API REST para administrar estudiantes, usuarios, roles, grados, horarios,
-registros de asistencia y reportes. El backend está construido con FastAPI,
-SQLAlchemy, Pydantic y PostgreSQL.
+API REST de KronosGate para la gestión educativa. El backend está implementado con FastAPI, SQLAlchemy, Pydantic, PostgreSQL y JWT. Su responsabilidad es autenticar usuarios, validar permisos, administrar estudiantes, grados, usuarios, roles, horarios, registros y reportes, y persistir los datos de forma segura.
 
-Esta guía explica desde los requisitos iniciales hasta cómo ejecutar, probar y
-diagnosticar la API. Ejecuta los comandos desde la carpeta
-`Media-tecnica-Backend`, salvo que se indique otro directorio.
+## 1. Objetivo del proyecto
 
-## Índice
+KronosGate busca controlar el ingreso a un centro educativo y registrar tardanzas. La parte backend entrega la lógica real del sistema, define los endpoints HTTP y se convierte en la capa que decide qué operaciones están permitidas para cada usuario.
 
-1. [Cómo funciona el proyecto](#cómo-funciona-el-proyecto)
-2. [Requisitos](#requisitos)
-3. [Preparar PostgreSQL](#preparar-postgresql)
-4. [Crear el entorno de Python](#crear-el-entorno-de-python)
-5. [Configurar las variables](#configurar-las-variables)
-6. [Actualizar una base de datos existente](#actualizar-una-base-de-datos-existente)
-7. [Iniciar el backend](#iniciar-el-backend)
-8. [Iniciar el frontend junto al backend](#iniciar-el-frontend-junto-al-backend)
-9. [Comprobar que funciona](#comprobar-que-funciona)
-10. [Autenticación y roles](#autenticación-y-roles)
-11. [Rutas principales](#rutas-principales)
-12. [Ejecutar las pruebas](#ejecutar-las-pruebas)
-13. [Solución de problemas](#solución-de-problemas)
-14. [Seguridad antes de desplegar](#seguridad-antes-de-desplegar)
+En este repositorio se implementan los siguientes dominios:
 
-## Cómo funciona el proyecto
+- autenticación y sesión basada en JWT
+- gestión de usuarios y roles
+- gestión de estudiantes
+- gestión de grados
+- configuración de horarios
+- registro de ingreso y asistencia
+- reportes por grado, estudiante y rango de fechas
 
-Una solicitud suele recorrer estas capas:
+La interfaz puede ocultar funcionalidad, pero el backend es la autoridad final. Si un usuario intenta algo no permitido, el endpoint debe rechazarlo.
 
-```text
-Frontend
-  -> Router FastAPI (recibe la solicitud HTTP)
-  -> Dependencias de seguridad (autentican y autorizan)
-  -> Service (aplica las reglas de negocio)
-  -> Repository (consulta o modifica los datos)
-  -> PostgreSQL
-```
+## 2. Tecnologías reales utilizadas
 
-El backend es la autoridad final para permisos y reglas de asistencia. Ocultar
-un botón en el frontend no sustituye la validación del endpoint.
+La configuración real se observa en `requirements.txt` y `app/core/config.py`.
 
-```text
-app/
-├── core/          Configuración, conexión a base de datos y seguridad
-├── models/        Tablas y relaciones de SQLAlchemy
-├── repositories/  Consultas a la base de datos
-├── routers/       Endpoints HTTP de FastAPI
-├── schemas/       Validación de entradas y respuestas con Pydantic
-├── services/      Reglas de negocio
-├── utils/         Respuestas y utilidades compartidas
-└── main.py        Aplicación FastAPI y registro de routers
-```
+| Tecnología | Uso real en el proyecto |
+| --- | --- |
+| Python | lenguaje principal del backend |
+| FastAPI | API REST, validación, Swagger / OpenAPI |
+| Uvicorn | servidor ASGI para levantar la aplicación |
+| SQLAlchemy | ORM para modelar tablas y ejecutar consultas |
+| PostgreSQL | base de datos relacional principal |
+| psycopg2-binary / psycopg[binary] | drivers PostgreSQL |
+| Pydantic v2 | validación de request/response y configuración |
+| pydantic-settings | carga de variables de entorno desde `.env` |
+| python-jose | generación y validación de JWT |
+| bcrypt | hash de contraseñas |
+| python-multipart | compatibilidad con formularios multipart |
+| email-validator | validación de correos |
+| CORS Middleware | permitir llamadas del frontend |
 
-### Funcionamiento de cada carpeta
-
-| Carpeta | Qué contiene y para qué sirve | Cuándo se modifica |
-| --- | --- | --- |
-| `app/` | Paquete raíz de Python que contiene el código ejecutable de la API. | Al implementar o cambiar el backend. |
-| `app/core/` | Ajustes comunes, variables de entorno, conexión/sesiones de SQLAlchemy y autenticación/autorización JWT. | Al cambiar configuración global, base de datos o reglas de autenticación. |
-| `app/models/` | Clases SQLAlchemy que describen tablas, columnas, claves y relaciones de la base de datos. | Al cambiar la estructura persistida. Acompaña los cambios de esquema con una migración para bases existentes. |
-| `app/schemas/` | Modelos Pydantic para validar lo que entra por la API y definir datos que salen en las respuestas. | Al añadir o modificar campos de solicitudes y respuestas. |
-| `app/repositories/` | Consultas a la base de datos: filtros, búsquedas, ordenamiento, inserciones y eliminaciones. No debería contener reglas HTTP. | Al cambiar cómo se leen o guardan datos. |
-| `app/services/` | Lógica de negocio que coordina repositorios y aplica reglas como validar horarios, permisos o estados. | Al cambiar el comportamiento de una operación del sistema. |
-| `app/routers/` | Rutas/endpoints HTTP, parámetros FastAPI, dependencias de rol, códigos de estado y transformación de errores. | Al publicar una operación nueva o ajustar el contrato HTTP. |
-| `app/utils/` | Funciones comunes reutilizadas por distintas capas, como formatos de respuesta, cálculos de tiempo y verificaciones auxiliares. | Al extraer o ajustar una utilidad compartida. |
-| `tests/` | Pruebas automáticas para reglas de negocio, autorización y comportamiento de la API. | Cada vez que se corrige o agrega comportamiento. |
-| `docs/` | Material de apoyo técnico que no forma parte de las rutas ejecutables. | Al documentar arquitectura, diseño o cambios de base de datos. |
-| `docs/diagrams/` | Diagramas visuales y documentación de relaciones entre entidades. | Cuando cambia el modelo o sus relaciones. |
-| `docs/migrations/` | Scripts SQL incrementales para actualizar bases que ya tenían tablas antes del cambio. | Cuando un cambio de modelo requiere modificar una base existente. |
-| `.venv/` | Paquetes instalados para este proyecto en el equipo local. La crea el desarrollador; no se comparte ni se sube a Git. | La administra Python/pip, no se edita a mano. |
-
-### Funcionamiento de las capas por solicitud
-
-1. **Router:** recibe el método, la ruta, los parámetros y el cuerpo HTTP.
-2. **Schema:** FastAPI/Pydantic valida tipos, campos obligatorios y límites de
-   la solicitud antes de ejecutar la lógica.
-3. **Seguridad (`core/segurity.py`):** valida el token y el rol/permisos
-   requeridos por el endpoint.
-4. **Service:** aplica las reglas de negocio y coordina el caso de uso.
-5. **Repository:** ejecuta consultas SQLAlchemy y devuelve modelos de datos.
-6. **Model:** representa la tabla y sus relaciones con otras entidades.
-7. **Router/utilidad de respuesta:** transforma el resultado en la respuesta
-   JSON estándar del sistema.
-
-Los modelos describen la base de datos; los schemas describen el contrato de la
-API. No son intercambiables. Cuando se agrega una columna que debe llegar a una
-base existente, actualiza el modelo, el schema apropiado, la lógica que la usa,
-las pruebas y una migración SQL.
-
-## Requisitos
-
-- Python 3.10 o superior.
-- PostgreSQL 12 o superior, local o administrado (por ejemplo, un proveedor
-  compatible con PostgreSQL).
-- `pip`, que normalmente se instala junto con Python.
-- Para trabajar junto al frontend: Node.js 18 o superior y npm.
-- Acceso a una base de datos y credenciales válidas. El backend no trae una
-  base de datos ni usuarios de demostración.
-
-Comprueba las herramientas desde PowerShell:
-
-```powershell
-python --version
-python -m pip --version
-```
-
-En algunas instalaciones de Windows el comando de Python puede ser `py`:
-
-```powershell
-py --version
-```
-
-Si el comando `python` no existe, instala Python desde el sitio oficial y activa
-la opción para agregar Python al `PATH`; luego abre una terminal nueva.
-
-## Preparar PostgreSQL
-
-Antes de iniciar FastAPI necesitas una base de datos PostgreSQL alcanzable desde
-tu equipo. Puedes usar una instalación local o crear una instancia en tu
-proveedor.
-
-1. Crea una base de datos vacía y un usuario con permisos para crear y modificar
-   tablas en esa base.
-2. Anota el host, el puerto (normalmente `5432`), el nombre de la base, el
-   usuario y su contraseña.
-3. Conserva esos datos privados. No los pegues en capturas, en el código ni en
-   archivos que se vayan a subir a Git.
-4. La conexión del proyecto requiere SSL (`sslmode=require`), así que utiliza
-   una instancia/proveedor PostgreSQL que admita conexiones SSL.
-
-La URL suele tener esta forma:
+## 3. Estructura real del backend
 
 ```text
-postgresql://USUARIO:CONTRASEÑA@HOST:5432/NOMBRE_BASE
+Media-tecnica-Backend/
+├── app/
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   └── segurity.py
+│   ├── models/
+│   │   ├── base.py
+│   │   ├── config_horario.py
+│   │   ├── estudiante.py
+│   │   ├── grado.py
+│   │   ├── permiso.py
+│   │   ├── registro.py
+│   │   ├── rol.py
+│   │   ├── rol_permiso.py
+│   │   └── usuario.py
+│   ├── repositories/
+│   │   ├── base_repositorie.py
+│   │   ├── config_horario_repository.py
+│   │   ├── estudiante_repository.py
+│   │   ├── grado_repository.py
+│   │   ├── permiso_repository.py
+│   │   ├── registro_repository.py
+│   │   ├── reporte_service.py
+│   │   ├── rol_permiso_repository.py
+│   │   ├── rol_repository.py
+│   │   └── usuario_repository.py
+│   ├── routers/
+│   │   ├── auth_router.py
+│   │   ├── config_horario_router.py
+│   │   ├── estudiante_router.py
+│   │   ├── grado_router.py
+│   │   ├── registro_router.py
+│   │   ├── reporte_router.py
+│   │   ├── rol_router.py
+│   │   └── usuario_router.py
+│   ├── schemas/
+│   │   ├── auth.py
+│   │   ├── config_horario.py
+│   │   ├── estudiante.py
+│   │   ├── grado.py
+│   │   ├── registro.py
+│   │   ├── rol.py
+│   │   ├── rol_permiso.py
+│   │   └── usuario.py
+│   ├── services/
+│   │   ├── config_horario_service.py
+│   │   ├── estudiante_service.py
+│   │   ├── grado_service.py
+│   │   ├── permiso_service.py
+│   │   ├── registro_service.py
+│   │   ├── reporte_service.py
+│   │   ├── rol_service.py
+│   │   └── usuario_service.py
+│   ├── utils/
+│   │   ├── auth_validators.py
+│   │   ├── permissions.py
+│   │   ├── responses.py
+│   │   └── time_utils.py
+│   ├── __init__.py
+│   ├── main.py
+│   └── core/
+├── tests/
+├── .env.example
+├── .env
+├── README.md
+├── requirements.txt
+└── docs/
 ```
 
-Sustituye los valores de ejemplo por los datos reales del proveedor. Si la
-contraseña incluye caracteres reservados para una URL (por ejemplo `@`, `#`,
-`:` o `/`), codifícalos con URL encoding antes de construir `DATABASE_URL`.
+### Responsabilidad de cada capa
 
-## Crear el entorno de Python
+- `app/core`: configuración global, lectura de `.env`, conexión DB, autenticación y autorización.
+- `app/models`: entidades SQLAlchemy que representan tablas.
+- `app/repositories`: consultas y operaciones de persistencia.
+- `app/services`: reglas de negocio y coordinación entre capas.
+- `app/routers`: endpoints HTTP y dependencias FastAPI.
+- `app/schemas`: validación de entrada/salida con Pydantic.
+- `app/utils`: helpers reutilizables como permisos y respuestas estándar.
+- `tests`: pruebas de autenticación, roles, password validation y DB.
 
-Un entorno virtual separa las dependencias de este proyecto de las de otros
-proyectos instalados en el equipo.
+## 4. Punto de entrada de la aplicación
 
-### Windows PowerShell
+La aplicación se levanta desde `app/main.py`.
 
-Desde la carpeta del backend:
+```python
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="API Backend para Control de Asistencia Media Técnica",
+)
+```
+
+Además, en el mismo archivo se registran los routers e incluye CORS:
+
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=settings.CORS_CREDENTIALS,
+    allow_methods=settings.CORS_METHODS,
+    allow_headers=settings.CORS_HEADERS,
+)
+```
+
+Se incluyen estos routers:
+
+- `auth_router`
+- `estudiante_router`
+- `usuario_router`
+- `registro_router`
+- `grado_router`
+- `rol_router`
+- `config_horario_router`
+- `reporte_router`
+
+También se ejecuta esto en arranque:
+
+```python
+Base.metadata.create_all(bind=engine)
+```
+
+Esto crea tablas si no existen; no reemplaza migraciones formales ni debe tomarse como estrategia definitiva para entornos complejos.
+
+## 5. Configuración y variables de entorno
+
+La configuración se centraliza en `app/core/config.py`.
+
+```python
+class Settings(BaseSettings):
+    DATABASE_URL: str
+    APP_NAME: str = "Media Técnica Backend"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = False
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_HOURS: int = 24
+    CORS_ORIGINS: list[str]
+    CORS_CREDENTIALS: bool = True
+    CORS_METHODS: list[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    CORS_HEADERS: list[str] = ["Authorization", "Content-Type"]
+```
+
+Validaciones reales implementadas:
+
+- `JWT_SECRET_KEY` debe tener al menos 32 caracteres.
+- `DATABASE_URL` no puede estar vacía.
+- `CORS_ORIGINS` debe ser una lista válida, sin comodines ni rutas.
+
+El archivo `.env.example` contiene el formato esperable:
+
+```env
+DATABASE_URL=postgresql://USER:PASS@HOST:5432/DATABASE
+APP_NAME=Media Técnica Backend
+APP_VERSION=1.0.0
+DEBUG=false
+JWT_SECRET_KEY=change-me
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
+CORS_ORIGINS=["http://localhost:5173"]
+CORS_CREDENTIALS=true
+CORS_METHODS=["GET","POST","PUT","DELETE","OPTIONS"]
+CORS_HEADERS=["Authorization","Content-Type"]
+```
+
+## 6. Conexión a la base de datos
+
+La conexión está en `app/core/database.py`.
+
+```python
+engine = create_engine(
+    settings.DATABASE_URL,
+    connect_args={"sslmode": "require"}
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+```
+
+Esto muestra que el proyecto usa PostgreSQL con conexión SSL obligatoria. Las rutas usan `Depends(get_db)` para obtener una sesión por solicitud y cerrarla al terminar.
+
+```python
+def get_db() -> Session:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+## 7. Modelos principales y relaciones
+
+### `Usuario`
+
+Archivo: `app/models/usuario.py`
+
+Representa el usuario del sistema:
+
+- `id_usuario` PK
+- `nombre`, `apellido1`, `apellido2`
+- `correo` único
+- `contrasena_hash`
+- `rol_id` FK a `roles.id_roles`
+- `estado`
+
+Relaciones:
+
+- `rol` → `Rol`
+- `registros` → `RegistroIngreso`
+
+### `Rol`
+
+Archivo: `app/models/rol.py`
+
+- `id_roles` PK
+- `nombre`
+- `permisos` (campo textual)
+- `descripcion`
+
+Relación con permisos muchos a muchos a través de `rol_permiso`.
+
+### `Permiso` y `RolPermiso`
+
+- `Permiso` define el nombre de una acción autorizable.
+- `RolPermiso` crea la relación entre rol y permiso.
+
+### `Grado`
+
+Archivo: `app/models/grado.py`
+
+- `id_grado` PK
+- `numero_grado`
+- `grupo`
+- `estado`
+
+Relación:
+
+- `Grado` tiene muchos `Estudiante`.
+
+### `Estudiante`
+
+Archivo: `app/models/estudiante.py`
+
+- `id_estudiante` PK
+- `nombre`, `apellido1`, `apellido2`
+- `documento` único
+- `grado_id` FK
+- `codigo_qr`
+- `estado`
+
+Relación:
+
+- `Estudiante` tiene muchos `RegistroIngreso`.
+
+### `ConfigHorario`
+
+Archivo: `app/models/config_horario.py`
+
+Define los horarios de ingreso, tolerancia, cierre y vigencia:
+
+- `hora_inicio_clase`
+- `hora_limite_ingreso`
+- `hora_cierre_asistencia`
+- `min_tolerancia`
+- `aplica_desde`, `aplica_hasta`
+- `estado`
+
+### `RegistroIngreso`
+
+Archivo: `app/models/registro.py`
+
+- `id` PK
+- `estudiante_id` FK
+- `usuario_id` FK
+- `config_id` FK
+- `fecha`, `hora`
+- `estado`
+- `min_retraso`
+
+```mermaid
+erDiagram
+    ROL ||--o{ USUARIO : tiene
+    ROL ||--o{ ROL_PERMISO : incluye
+    PERMISO ||--o{ ROL_PERMISO : participa
+    GRADO ||--o{ ESTUDIANTE : contiene
+    ESTUDIANTE ||--o{ REGISTRO_INGRESO : genera
+    USUARIO ||--o{ REGISTRO_INGRESO : registra
+    CONFIG_HORARIO ||--o{ REGISTRO_INGRESO : aplica
+```
+
+## 8. Esquemas Pydantic y validación de entrada
+
+Los schemas están en `app/schemas/`.
+
+Ejemplo real en `app/schemas/auth.py`:
+
+```python
+class LoginRequest(BaseModel):
+    email: EmailStr
+    contraseña: str = Field(..., min_length=8, max_length=72)
+```
+
+Se valida también el tamaño en bytes UTF-8:
+
+```python
+def validar_contrasena_bytes(cls, v):
+    bytes_length = len(v.encode('utf-8'))
+    if bytes_length > 72:
+        raise ValueError("La contraseña no puede exceder 72 bytes en UTF-8")
+    return v
+```
+
+Esto es importante porque `bcrypt` tiene límite duro de 72 bytes.
+
+## 9. Repositorios, servicios y routers
+
+### Repositorios
+
+Archivos en `app/repositories/`.
+
+Su responsabilidad es acceder a la base de datos. Ejemplo: `UsuarioRepository` busca usuarios por correo o rol.
+
+```python
+class UsuarioRepository(BaseRepository[Usuario]):
+    def get_by_correo(self, correo: str):
+        return self.db.query(self.model).filter(self.model.correo == correo).first()
+```
+
+### Servicios
+
+Archivos en `app/services/`.
+
+Aquí se aplican reglas de negocio. Ejemplo: `UsuarioService.crear_usuario` valida correo único, extrae la contraseña, hace hash y luego guarda la entidad.
+
+### Routers
+
+Archivos en `app/routers/`.
+
+Los routers exponen endpoints HTTP. Un ejemplo real es `app/routers/auth_router.py`:
+
+```python
+@router.post("/login", response_model=dict, status_code=200)
+def login(...):
+```
+
+La ruta llama al servicio, valida la credencial y responde con token + datos del usuario.
+
+## 10. Autenticación JWT
+
+La seguridad real está en `app/core/segurity.py`.
+
+### Generación del token
+
+```python
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(hours=settings.JWT_EXPIRATION_HOURS)
+    to_encode.update({"exp": int(expire.timestamp())})
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+```
+
+### Payload real
+
+El login comprende esto:
+
+```python
+access_token = create_access_token(
+    data={
+        "sub": str(usuario.id_usuario),
+        "rol": usuario.rol.nombre if usuario.rol else "usuario"
+    },
+    expires_delta=timedelta(hours=settings.JWT_EXPIRATION_HOURS)
+)
+```
+
+El JWT incluye:
+
+- `sub`: ID del usuario
+- `rol`: rol del usuario
+- `exp`: expiración en UNIX timestamp
+
+### Validación de token
+
+La validación se realiza en `get_current_user()` y `get_current_user_from_token()`.
+
+Casos que se manejan:
+
+- token vacío → `401`
+- token expirado → `401`
+- firma inválida → `401`
+- `sub` incorrecto → `401`
+- usuario inexistente → `401`
+- usuario inactivo → `403`
+
+```python
+payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+```
+
+## 11. Autorización por roles y permisos
+
+La autorización se implementa con dependencias reutilizables en `app/core/segurity.py`.
+
+### Dependencias reales
+
+- `require_admin`
+- `require_docente_or_admin`
+- `require_vigilante`
+- `permiso_requerido("crear_usuario")`
+
+Ejemplo real:
+
+```python
+def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if current_user.get("rol") != "admin":
+        raise HTTPException(status_code=403, detail="No autorizado. Se requiere rol: admin")
+    return current_user
+```
+
+La utilidad `app/utils/permissions.py` también valida permisos por listas:
+
+```python
+def tiene_permiso(user, permiso):
+    if user.get("rol") == "admin":
+        return True
+    return permiso in user.get("permisos", [])
+```
+
+Esto muestra que los administradores tienen acceso completo por rol y que los demás usuarios dependen de permisos específicos.
+
+## 12. Contraseñas y hashing
+
+No se guardan contraseñas en texto plano.
+
+```python
+def hash_password(password: str) -> str:
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt(rounds=12)
+    hashed_bytes = bcrypt.hashpw(password_bytes, salt)
+    return hashed_bytes.decode('utf-8')
+```
+
+```python
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+```
+
+Se valida que la contraseña no supere 72 bytes UTF-8. Esto es crítico al usar bcrypt.
+
+## 13. Endpoints reales del backend
+
+### 13.1. Autenticación
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| `POST` | `/auth/login` | No | login con email + contraseña |
+| `POST` | `/auth/logout` | Sí | cierre de sesión / auditoría |
+
+### 13.2. Usuarios
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| `GET` | `/usuarios/` | `require_admin` | listado |
+| `GET` | `/usuarios/activos` | `require_admin` | activos |
+| `GET` | `/usuarios/{usuario_id}` | `require_admin` | detalle |
+| `POST` | `/usuarios/` | permiso `crear_usuario` | crear usuario |
+| `PUT` | `/usuarios/{usuario_id}` | permiso `editar_usuario` | actualizar |
+| `PUT` | `/usuarios/{usuario_id}/contrasena` | `require_admin` | cambiar contraseña |
+| `DELETE` | `/usuarios/{usuario_id}` | permiso `eliminar_usuario` | eliminar |
+
+### 13.3. Estudiantes
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| `GET` | `/estudiantes/` | `require_docente_or_admin` | listado |
+| `GET` | `/estudiantes/buscar` | `require_docente_or_admin` | búsqueda |
+| `GET` | `/estudiantes/documento/{documento}` | token válido | búsqueda por documento |
+| `GET` | `/estudiantes/activos` | `require_docente_or_admin` | activos |
+| `GET` | `/estudiantes/grado/{grado_id}` | `require_docente_or_admin` | estudiantes por grado |
+| `GET` | `/estudiantes/{estudiante_id}` | `require_docente_or_admin` | detalle |
+| `POST` | `/estudiantes/` | permiso `crear_estudiante` | crear |
+| `PUT` | `/estudiantes/{estudiante_id}` | permiso `editar_estudiante` | actualizar |
+| `DELETE` | `/estudiantes/{estudiante_id}` | permiso `eliminar_estudiante` | eliminar |
+
+### 13.4. Grados
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| `GET` | `/grados/` | `require_docente_or_admin` | listado |
+| `GET` | `/grados/activos` | `require_docente_or_admin` | activos |
+| `GET` | `/grados/numero/{numero_grado}` | `require_docente_or_admin` | por número |
+| `GET` | `/grados/{grado_id}` | `require_docente_or_admin` | detalle |
+| `POST` | `/grados/` | permiso `crear_grado` | crear |
+| `PUT` | `/grados/{grado_id}` | permiso `editar_grado` | actualizar |
+| `DELETE` | `/grados/{grado_id}` | permiso `eliminar_grado` | eliminar |
+
+### 13.5. Registros de ingreso
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| `GET` | `/registros/` | `require_docente_or_admin` | listado |
+| `GET` | `/registros/ultimos` | `require_docente_or_admin` | últimos |
+| `GET` | `/registros/estudiante/{estudiante_id}` | `require_docente_or_admin` | historial |
+| `GET` | `/registros/usuario/{usuario_id}` | `require_admin` | auditoría |
+| `GET` | `/registros/fecha/{fecha}` | `require_docente_or_admin` | filtro por fecha |
+| `GET` | `/registros/estado/{estado}` | `require_docente_or_admin` | filtro por estado |
+| `GET` | `/registros/{registro_id}` | `require_docente_or_admin` | detalle |
+| `POST` | `/registros/` | `require_vigilante` | registrar ingreso |
+| `PUT` | `/registros/{registro_id}` | permiso `editar_registro` | actualizar |
+| `DELETE` | `/registros/{registro_id}` | permiso `eliminar_registro` | eliminar |
+
+### 13.6. Configuración horaria
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| `GET` | `/config-horarios/` | `require_docente_or_admin` | listado |
+| `GET` | `/config-horarios/activos` | `require_docente_or_admin` | activos |
+| `GET` | `/config-horarios/vigente` | token válido | vigente |
+| `GET` | `/config-horarios/fecha/{fecha}` | `require_docente_or_admin` | por fecha |
+| `GET` | `/config-horarios/{config_id}` | `require_docente_or_admin` | detalle |
+| `POST` | `/config-horarios/` | permiso `crear_config_horario` | crear |
+| `PUT` | `/config-horarios/{config_id}` | permiso `editar_config_horario` | actualizar |
+| `DELETE` | `/config-horarios/{config_id}` | permiso `eliminar_config_horario` | eliminar |
+
+### 13.7. Roles
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| `GET` | `/roles/` | `require_admin` | listado |
+| `GET` | `/roles/nombre/{nombre}` | `require_admin` | búsqueda por nombre |
+| `GET` | `/roles/buscar` | `require_admin` | búsqueda |
+| `GET` | `/roles/{rol_id}` | `require_admin` | detalle |
+
+### 13.8. Reportes
+
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| `GET` | `/reportes/asistencia/grado/{grado_id}` | `require_docente_or_admin` | reporte por grado |
+| `GET` | `/reportes/asistencia/estudiante/{estudiante_id}` | `require_docente_or_admin` | reporte por estudiante |
+| `GET` | `/reportes/actividad` | `require_docente_or_admin` | actividad por rango |
+
+## 14. Flujo de una solicitud real
+
+```mermaid
+flowchart LR
+    A[Cliente HTTP] --> B[Router FastAPI]
+    B --> C[Schema Pydantic]
+    C --> D[Dependencias de seguridad]
+    D --> E[Servicio]
+    E --> F[Repositorio]
+    F --> G[(PostgreSQL)]
+    G --> F
+    F --> E
+    E --> H[Respuesta JSON]
+    H --> I[HTTP 200/201/400/401/403/404/422/500]
+```
+
+Ejemplo de login:
+
+1. El cliente envía `POST /auth/login` con email y contraseña.
+2. FastAPI valida el schema `LoginRequest`.
+3. `UsuarioService` busca el usuario por correo.
+4. `verify_password` compara el hash contra la contraseña enviada.
+5. Si es correcta, se genera un JWT con `sub` y `rol`.
+6. El backend responde con `access_token`, `token_type`, `expires_in` y `user`.
+7. El cliente guarda el token y lo usa en futuras llamadas autenticadas.
+
+## 15. Manejo de errores y códigos HTTP
+
+Códigos reales que aparecen en la implementación:
+
+- `200 OK` para respuestas exitosas.
+- `201 Created` en creación de registros.
+- `400 Bad Request` para validaciones de negocio o fechas inválidas.
+- `401 Unauthorized` para token faltante, inválido o expirado.
+- `403 Forbidden` para acceso no autorizado.
+- `404 Not Found` cuando no existe un registro.
+- `422 Unprocessable Entity` cuando el schema rechaza datos.
+- `500 Internal Server Error` para fallos inesperados.
+
+En los routers se usan `HTTPException` con `detail` para devolver mensajes específicos.
+
+## 16. Pruebas reales del proyecto
+
+La carpeta `tests/` incluye varias pruebas:
+
+- `test_auth_roles.py`
+- `test_db.py`
+- `test_estudiante_delete.py`
+- `test_password_simple.py`
+- `test_password_validation.py`
+- `test_query.py`
+- `test_registro_schema.py`
+- `test_reporte_service.py`
+
+Se ejecutan con pytest.
 
 ```powershell
+cd "C:\Users\PC\OneDrive\Escritorio\Media tecnica\Media-tecnica-Backend"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pytest -q
+```
+
+## 17. Cómo ejecutar el backend
+
+### Requisitos
+
+- Python 3.10+
+- PostgreSQL accesible desde el equipo
+- `.env` correcto con los valores reales del entorno
+
+### Pasos
+
+```powershell
+cd "C:\Users\PC\OneDrive\Escritorio\Media tecnica\Media-tecnica-Backend"
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+copy .env.example .env
 ```
 
-Si PowerShell bloquea la activación por la política de ejecución, permite
-scripts solo para la terminal actual y vuelve a activar el entorno:
+Editar `.env` con la URL real de la base de datos y secret key válida.
+
+Luego arrancar:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-La opción `-Scope Process` no cambia la política global del equipo. También
-puedes omitir la activación y ejecutar directamente:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-### macOS o Linux
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-Para salir del entorno virtual cuando termines:
-
-```text
-deactivate
-```
-
-## Configurar las variables
+Swagger queda disponible en:
 
-FastAPI lee la configuración desde un archivo `.env` ubicado en la raíz del
-backend. El archivo `.env` contiene secretos y no se debe compartir ni subir a
-Git. En este proyecto la configuración local debe crearse manualmente; el
-archivo `.env.example` del frontend configura el cliente web, no las
-credenciales del backend.
-
-En Windows crea o abre el archivo local:
+- http://localhost:8000/docs
+- http://localhost:8000/openapi.json
 
-```powershell
-if (-not (Test-Path .env)) { New-Item -ItemType File -Path .env }
-notepad .env
-```
+## 18. Seguridad y limitaciones reales
 
-En macOS/Linux:
-
-```bash
-touch .env
-nano .env
-```
+El backend implementa autenticación con JWT, validación por roles y contraseñas hasheadas con bcrypt. Sin embargo, hay aspectos que conviene tener presentes:
 
-Añade estas variables y sustituye los valores de ejemplo:
+- la sesión es stateless; no hay blacklist real de tokens implementada en la base de datos.
+- la autenticación se basa en un token en Authorization con Bearer.
+- CORS está limitado por orígenes declarados en configuración.
+- el arranque usa `create_all()`, que facilita desarrollo, pero no reemplaza migraciones en producción.
 
-```dotenv
-DATABASE_URL=postgresql://USUARIO:CONTRASEÑA@HOST:5432/NOMBRE_BASE
-JWT_SECRET_KEY=REEMPLAZAR_POR_UN_SECRETO_ALEATORIO_DE_48_CARACTERES_O_MAS
-CORS_ORIGINS=["http://localhost:5173"]
-DEBUG=true
-```
+No se debe afirmar que hay protección absoluta contra todas las amenazas sin evidencia en código; lo que sí está comprobado aquí es la validación de JWT, control de permisos, hash bcrypt y restricciones de entrada.
 
-### Qué significa cada variable
+## 19. Preguntas técnicas para la sustentación
 
-| Variable | Obligatoria | Uso |
-| --- | --- | --- |
-| `DATABASE_URL` | Sí | URL de conexión PostgreSQL. Debe apuntar a una base existente y alcanzable. |
-| `JWT_SECRET_KEY` | Sí | Secreto con el que se firman los tokens de acceso. Debe tener al menos 32 caracteres. |
-| `CORS_ORIGINS` | Sí | Lista JSON de orígenes web autorizados para llamar a la API. En desarrollo, permite el Vite local. |
-| `DEBUG` | No | Activa el modo de depuración y recarga automática al ejecutar `app.main` directamente. Por defecto es `false`. |
-| `APP_NAME` | No | Nombre mostrado por la documentación de la API. |
-| `APP_VERSION` | No | Versión mostrada por la API. |
-| `JWT_ALGORITHM` | No | Algoritmo de firma JWT; por defecto `HS256`. |
-| `JWT_EXPIRATION_HOURS` | No | Duración del token en horas; por defecto `24`. |
-| `CORS_CREDENTIALS` | No | Permite credenciales en solicitudes CORS; por defecto `true`. |
-| `CORS_METHODS` | No | Métodos HTTP habilitados por CORS. |
-| `CORS_HEADERS` | No | Encabezados HTTP habilitados por CORS. |
+### Básicas
 
-La lista de CORS debe ser JSON válido, con corchetes y comillas dobles. No
-incluyas rutas, comodines (`*`), credenciales ni parámetros en los orígenes.
-Por ejemplo, `http://localhost:5173` es un origen; `http://localhost:5173/`
-con una ruta no es necesario.
-
-Genera un secreto JWT aleatorio localmente. No uses el texto de ejemplo como
-secreto real:
-
-```powershell
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-```
-
-Copia el resultado como valor de `JWT_SECRET_KEY` en `.env`. No pegues aquí ni
-compartas ese resultado. Si una clave real ya fue expuesta, rótala; eliminarla
-del archivo actual no la borra del historial de Git.
+1. ¿Qué es FastAPI y qué hace en este proyecto?  
+   Es el framework web del backend. Define rutas, validación de solicitudes, Swagger/OpenAPI y dependencias.
 
-## Actualizar una base de datos existente
-
-Al arrancar, `app.main` ejecuta `Base.metadata.create_all()`. Esto crea tablas
-que todavía no existan, pero **no modifica** tablas ya creadas. Por eso, antes
-de usar una base existente con la versión que incorpora la hora de cierre de
-asistencia, aplica una sola vez esta migración SQL:
+2. ¿Qué es SQLAlchemy?  
+   Es el ORM que conecta las clases Python con la base de datos PostgreSQL.
 
-```text
-docs/migrations/20261019_add_attendance_cutoff.sql
-```
+3. ¿Qué diferencia hay entre `model` y `schema`?  
+   El modelo representa la tabla; el schema representa la entrada/salida HTTP y valida datos.
 
-Ejemplo si tienes el cliente `psql` instalado:
-
-```powershell
-$env:PGSSLMODE = "require"
-psql -h HOST -p 5432 -U USUARIO -d NOMBRE_BASE -f docs/migrations/20261019_add_attendance_cutoff.sql
-```
+4. ¿Qué hace `get_db`?  
+   Crea una sesión por petición y la cierra al finalizar.
 
-`psql` solicitará la contraseña en la terminal. Usa una copia de seguridad
-antes de migrar una base con datos importantes. Sigue también el procedimiento
-de migraciones de tu proveedor. No vuelvas a aplicar una migración sin
-comprobar primero si ya se ejecutó.
+5. ¿Qué es JWT?  
+   Un token firmado que permite autenticar al usuario sin guardar sesión en servidor.
 
-Las configuraciones antiguas quedan con cierre a las 23:59 hasta que un
-administrador revise y guarde el horario correspondiente. Después de la
-migración, confirma la hora de cierre desde la pantalla de configuración.
+### Seguridad
 
-## Iniciar el backend
-
-Abre PowerShell en `Media-tecnica-Backend`, activa el entorno virtual y ejecuta:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
+6. ¿Qué se guarda en el payload del JWT?  
+   `sub`, `rol` y `exp` en la implementación real.
 
-En macOS/Linux, con el entorno activo:
+7. ¿Cómo se valida un token?  
+   Con `jwt.decode` usando la clave secreta y el algoritmo configurado.
 
-```bash
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
+8. ¿Cómo se comprueba si el usuario tiene permisos?  
+   Con dependencias de seguridad y funciones de permisos (`tiene_permiso`, `permiso_requerido`, etc.).
 
-Mantén la terminal abierta mientras uses la aplicación. Para detener el servidor
-presiona `Ctrl+C`. El modo `--reload` es para desarrollo local; no lo uses como
-servidor de producción.
+9. ¿Qué diferencia hay entre autenticación y autorización?  
+   Autenticación identifica quién es; autorización decide qué puede hacer.
 
-Direcciones locales:
+10. ¿Qué hace bcrypt en el proyecto?  
+   Hashea y verifica contraseñas de usuarios.
 
-- API: `http://localhost:8000`
-- Documentación Swagger: `http://localhost:8000/docs`
-- Documentación ReDoc: `http://localhost:8000/redoc`
-- Esquema OpenAPI: `http://localhost:8000/openapi.json`
-- Estado del servidor: `http://localhost:8000/health`
+### Arquitectura
 
-## Iniciar el frontend junto al backend
+11. ¿Qué papel cumple cada capa del backend?  
+   Router expone HTTP, service aplica negocio, repository persiste, modelotabla, schema valida.
 
-El frontend vive en la carpeta hermana `Media-Tecnica-Frontend` y utiliza Vite.
-Deja el backend corriendo en una terminal y abre una **segunda terminal**:
+12. ¿Qué pasa si el frontend intenta llamar un endpoint sin token?  
+   El backend responde `401` con `WWW-Authenticate: Bearer`.
 
-```powershell
-Set-Location ..\Media-Tecnica-Frontend
-npm ci
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-npm run dev
-```
+13. ¿Qué pasa si el token expira?  
+   La decodificación lanza `ExpiredSignatureError` y el backend responde `401`.
 
-Si el archivo `.env` del frontend ya existe, no hace falta reemplazarlo: confirma
-que `VITE_API_BASE_URL` apunte al backend local:
-
-```dotenv
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-La interfaz quedará en `http://localhost:5173`. Mantén abiertas las dos
-terminales. Si cambias la URL o variables del frontend, reinicia Vite para que
-las vuelva a cargar.
-
-No pongas secretos en variables `VITE_*`: Vite las incorpora al código que se
-envía al navegador. Para producción, `VITE_API_BASE_URL` debe ser una URL HTTPS
-del backend; el proyecto rechaza URLs HTTP y hosts locales durante el build de
-producción.
-
-## Comprobar que funciona
-
-1. Abre `http://localhost:8000/health`. Debe responder con
-   `"success": true`.
-2. Abre `http://localhost:8000/docs` para explorar endpoints y probar solicitudes.
-3. Abre `http://localhost:5173` para ver el frontend.
-4. Inicia sesión con una cuenta existente. El backend no crea usuarios ni
-   contraseñas predeterminados al arrancar.
-5. Comprueba que el origen del frontend está en `CORS_ORIGINS` si el navegador
-   informa un error CORS.
-
-Si todavía no existe un usuario administrador, solicita al responsable de la
-base de datos el procedimiento de aprovisionamiento autorizado para este
-entorno. No agregues una contraseña inicial real al README ni al código.
-
-## Autenticación y roles
-
-`POST /auth/login` recibe correo y contraseña y devuelve un token JWT. Las rutas
-protegidas reciben ese token en el encabezado:
-
-```http
-Authorization: Bearer <TOKEN>
-```
-
-Roles principales:
-
-| Rol | Acceso general |
-| --- | --- |
-| `ADMIN` | Administración del sistema y configuración |
-| `DOCENTE` | Consulta de registros y reportes académicos |
-| `VIGILANTE` | Registro de ingresos de estudiantes |
-
-Un token ausente o inválido normalmente produce `401`. Un usuario autenticado
-sin el rol requerido recibe `403`. El logout con JWT es stateless: el cliente
-descarta el token y los datos locales.
-
-## Rutas principales
-
-| Prefijo | Funcionalidad |
-| --- | --- |
-| `/auth` | Inicio y cierre de sesión |
-| `/estudiantes` | Búsqueda y administración de estudiantes |
-| `/usuarios` | Administración de usuarios |
-| `/grados` | Consulta y administración de grados |
-| `/roles` | Consulta de roles |
-| `/config-horarios` | Horarios activos, vigentes y por fecha |
-| `/registros` | Consultar y crear registros de asistencia |
-| `/reportes` | Reporte por grado, por estudiante y actividad general |
-
-Para obtener los métodos, parámetros, permisos y formatos exactos, consulta
-Swagger en `/docs` o el esquema en `/openapi.json`.
-
-## Ejecutar las pruebas
-
-Desde la carpeta del backend, con el entorno virtual activo:
-
-```powershell
-python -m pytest
-```
-
-Para ejecutar una prueba específica:
-
-```powershell
-python -m pytest tests\test_auth_roles.py -v
-python -m pytest tests\test_reporte_service.py -v
-```
-
-Las pruebas que importan la configuración necesitan las variables requeridas
-por el proyecto. En el entorno de desarrollo local puedes definirlas en `.env`.
-Para comprobar una prueba sin conexión al PostgreSQL de desarrollo, configura
-variables locales de prueba en la terminal y evita reutilizar credenciales de
-producción.
-
-Si `python -m pytest` muestra `No module named pytest`, instala las dependencias
-del proyecto con `python -m pip install -r requirements.txt` y vuelve a
-intentarlo.
-
-## Solución de problemas
-
-| Síntoma | Qué revisar |
-| --- | --- |
-| Falta `DATABASE_URL` o `JWT_SECRET_KEY` | Asegúrate de ejecutar desde la raíz del backend y de que `.env` exista con ambas variables. |
-| La clave JWT es demasiado corta | Genera un valor aleatorio local de 32 caracteres o más y actualiza `.env`. |
-| Error al convertir `CORS_ORIGINS` | Debe ser una lista JSON válida, por ejemplo `["http://localhost:5173"]`. |
-| No conecta a PostgreSQL | Comprueba host, puerto, nombre de base, usuario, contraseña, firewall y disponibilidad del servidor. |
-| Error SSL de PostgreSQL | El proyecto requiere SSL. Verifica que la instancia admita SSL y que sus datos de conexión sean correctos. |
-| `ModuleNotFoundError` al iniciar | Activa `.venv` e instala `requirements.txt` dentro de ese entorno. |
-| `uvicorn` no se reconoce | Ejecuta `python -m uvicorn ...` desde el backend con el entorno activado. |
-| El navegador muestra un error CORS | Incluye exactamente el origen del frontend (protocolo, host y puerto) en `CORS_ORIGINS`; reinicia el backend. |
-| Swagger responde, pero el login falla | Confirma que la cuenta exista, esté activa y tenga una contraseña válida. |
-| El frontend muestra error de conexión | Verifica que el backend esté ejecutándose en el puerto configurado por `VITE_API_BASE_URL`. |
-| El cambio de esquema no aparece | `create_all()` no actualiza tablas existentes; revisa y ejecuta la migración correspondiente. |
-
-## Seguridad antes de desplegar
-
-- No subas ni compartas `.env`, contraseñas, tokens o claves privadas.
-- Utiliza un `JWT_SECRET_KEY` aleatorio y distinto en cada entorno.
-- Configura `CORS_ORIGINS` solo con los dominios reales permitidos; no uses `*`.
-- Mantén `DEBUG=false` y utiliza HTTPS para el frontend y el backend.
-- No ejecutes el servidor de desarrollo con `--reload` en producción.
-- Aplica las migraciones antes de lanzar una versión que requiera nuevas
-  columnas o tablas.
-- Revisa los permisos de los endpoints y las pruebas de autorización antes de
-  publicar cambios.
-
-## Documentación relacionada
-
-- [README_COMPLEMENTARIO.md](README_COMPLEMENTARIO.md): arquitectura, roles,
-  modelo de datos y comportamiento de la API.
-- [docs/diagrams/database_design.md](docs/diagrams/database_design.md):
-  diagrama del modelo de datos.
-- [Frontend README](../Media-Tecnica-Frontend/README.md): configuración y
-  comandos de desarrollo del cliente web.
+14. ¿Qué ocurre si un usuario intenta acceder a un recurso sin el rol correcto?  
+   Se genera `HTTPException(403, detail=...)` en la dependencia de autorización.
+
+15. ¿Qué es CORS en este proyecto?  
+   Es la política que permite que el frontend del dominio configurado llame a la API.
+
+### Base de datos
+
+16. ¿Qué relación existe entre `Usuario` y `Rol`?  
+   Un usuario tiene un rol; un rol puede tener varios usuarios.
+
+17. ¿Qué relación existe entre `Grado` y `Estudiante`?  
+   Un grado contiene varios estudiantes.
+
+18. ¿Qué hace la tabla `rol_permiso`?  
+   Relaciona roles con permisos.
+
+19. ¿Qué representa `config_horario`?  
+   Define los tiempos de inicio, tolerancia y cierre de asistencia.
+
+20. ¿Qué representa `registro_ingreso`?  
+   Cada registro refleja el ingreso, hora, fecha, retraso y estado asociado a un estudiante.
+
+## 20. Glosario
+
+- API: conjunto de endpoints que exponen la funcionalidad del sistema.
+- REST: estilo de arquitectura basado en recursos y HTTP.
+- JWT: token firmado para autenticación.
+- Claim: campo dentro de un JWT, por ejemplo `sub` o `exp`.
+- ORM: mapeo de objetos a tablas DB.
+- SQLAlchemy: ORM principal del proyecto.
+- Pydantic: validación de datos para Python.
+- Router: capa de endpoints HTTP.
+- Service: lógica de negocio.
+- Repository: acceso a persistencia.
+- Model: clase que representa una tabla SQLAlchemy.
+- Schema: estructura de validación de request/response.
+- CORS: control de acceso entre orígenes distintos.
+- Hashing: transformación irreversible para proteger passwords.
+- PK: clave primaria.
+- FK: clave foránea.
+- HTTPException: error controlado en FastAPI.
+
+## 21. Conclusión
+
+El backend de KronosGate es una API REST organizada por capas: routers, servicios, repositorios, modelos y esquemas. La seguridad real se valida en FastAPI mediante JWT, dependencias de autorización y hash de contraseñas con bcrypt. La persistencia se gestiona con SQLAlchemy y PostgreSQL, lo que permite un sistema claro y extensible para registrar asistencia escolar y controlar permisos por rol.
+
+Este README refleja la implementación real observada en el código del repositorio y evita describir funcionalidad no respaldada por archivos del proyecto.
