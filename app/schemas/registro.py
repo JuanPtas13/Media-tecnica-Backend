@@ -33,9 +33,9 @@ class RegistroIngresoUpdate(BaseModel):
 class RegistroIngresoResponse(RegistroIngresoBase):
     """Schema de respuesta para RegistroIngreso"""
     id: int
+    estudiante_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
-
