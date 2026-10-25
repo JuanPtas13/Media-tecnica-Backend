@@ -34,6 +34,11 @@ class RegistroIngresoResponse(RegistroIngresoBase):
     """Schema de respuesta para RegistroIngreso"""
     id: int
     estudiante_id: Optional[int] = None
+    usuario_id: Optional[int] = None
+    config_id: Optional[int] = None
+    fecha: Optional[date] = None
+    hora: Optional[time] = None
+    estado: Optional[str] = Field(None, min_length=1, max_length=50)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
